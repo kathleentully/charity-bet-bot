@@ -4,6 +4,8 @@ import discord
 from discord.ext.commands import Bot
 from math import floor
 from os import getenv
+from random import choice
+
 load_dotenv()
 
 ADMIN_USERS = [int(x) for x in getenv("ADMIN_USERS").split(",")]
@@ -48,18 +50,21 @@ async def log(msg):
         print(msg)
 
 def admin_func(func):
-    async def wrapper(context):
+    async def wrapper(context, *args):
         if context.message.author.id not in ADMIN_USERS:
             await log(f'{context.message.author} attempted {context.prefix}{context.command}')
             await context.message.author.send(f'You are not an admin so you cannot execute {context.prefix}{context.command}')
             return
-        await func(context)
+        await func(context, *args)
     return wrapper
 
 def log_function_call(func):
     async def wrapper(context, *args):
-        await log(f'Received {context.prefix}{context.command} {args[0]} from {context.message.author}')
-        await func(context, *args)
+        await log(f'Received {context.prefix}{context.command} {args} from {context.message.author}')
+        try:
+            await func(context, *args)
+        except Exception as e:
+            await log(f'{context.prefix}{context.command} {args} from {context.message.author} FAILED:\n{e.message}')
     return wrapper
 
 async def send_user_game_state(user):
@@ -111,5 +116,49 @@ async def buyin(context, charge_amt: int):
     await log(f'{context.message.author}: amount owed: ${game_state[context.message.author].amount_owed}, tickets: {game_state[context.message.author].tickets_available} | bought in ${charge_amt}')
     await send_user_game_state(context.message.author)
 
+@bot.command(name='drawprep', help='')
+@admin_func
+@log_function_call
+async def drawprep(context, *args):
+    for user in game_state.keys():
+        await user.send('The drawing is about to happen! Get in your final bets and buyins!')
+        await send_user_game_state(user)
+        ### send open bets
+
+@bot.command(name='draw', help='')
+@admin_func
+@log_function_call
+async def draw(context, *args):
+    all_entries = []
+    for user, state in game_state.items():
+        all_entries += [user] * state.tickets_available
+        await log(f'{user}: {state.tickets_available}')
+    await log(f'Entries in drawing: {", ".join(all_entries)}')
+
+    if not len(all_entries):
+        await log('No entries, no winner')
+        return
+
+    winner = choice(all_entries)
+    await log(f'Winner: {winner}')
+    await context.send(f'And the winner is {winner.mention}!!')
+
+@bot.command(name='settleall', help='')
+@admin_func
+@log_function_call
+async def settleall(context, *args):
+    total = 0
+    for user, state in game_state.items():
+        await log(f'{user}: ${state.amount_owed}')
+        total += state.amount_owed
+    await log(f'total: ${total}')
+
+@bot.command(name='resetuser', help='')
+@admin_func
+@log_function_call
+async def resetuser(context, *args):
+    for mention in context.message.mentions:
+        game_state[mention] = UserState()
+        await send_user_game_state(mention)
 
 bot.run(getenv("TOKEN"))
