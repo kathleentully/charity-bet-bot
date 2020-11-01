@@ -162,7 +162,8 @@ async def drawprep(context, *args):
     for user in game_state.keys():
         await user.send('The drawing is about to happen! Get in your final bets and buyins!')
         await send_user_game_state(user)
-        ### send open bets
+        if game_state[user].open_bets:
+            user.send('Be sure to close all open bets before the drawing. Tickets in open bet pools are lost when the winners are drawn!')
     standings()
 
 
