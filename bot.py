@@ -19,6 +19,7 @@ EVENT_PRICES = [
     Deal(price=10, tickets=11),
     Deal(price=1, tickets=1)
 ]
+VENMO_USERNAME_FOR_DONATIONS = f'@{getenv('VENMO_USERNAME')}'
 open_bets = {}
 bet_id_cursor = 0
 used_bet_ids = set()
@@ -114,7 +115,7 @@ async def on_ready():
 
 
 
-@bot.command(name='register', help='')
+@bot.command(name='register', help=f'usage: {COMMAND_PREFIX}register\nRegister as a participant without buying in yet')
 @log_function_call
 async def register(context):
     global game_state
@@ -125,7 +126,7 @@ async def register(context):
     await context.message.author.send(f'Use the following command to buyin: {context.prefix}buyin <amount of money>')
 
 
-@bot.command(name='status', help='')
+@bot.command(name='status', help=f'usage: {COMMAND_PREFIX}status\nGet your current status (money owed, tickets available, and open bets) in a private message')
 @log_function_call
 async def status(context):
     global game_state
@@ -134,7 +135,7 @@ async def status(context):
     await send_user_game_state(context.message.author)
 
 
-@bot.command(name='buyin', help='')
+@bot.command(name='buyin', help=f'usage: {COMMAND_PREFIX}buyin <amount of money>\nSpecify the amount of money you are spending and you will be given the correct amount of tickets.\nTickets prices are {", ".join([f"${x.price} for {x.tickets} tickets" for x in EVENT_PRICES])}\nYou may buy in multiple times to replenish your tickets as needed. Deals will not be applied retroactively.\nYou can always check how much money you owe by using the command {COMMAND_PREFIX}status')
 @log_function_call
 async def buyin(context, charge_amt: int):
     global game_state
@@ -155,7 +156,7 @@ async def buyin(context, charge_amt: int):
     await send_user_game_state(context.message.author)
 
 
-@bot.command(name='drawprep', help='')
+@bot.command(name='drawprep', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}drawprep\nSends a message to all particpants detailing their current status and announcing the drawing will be happening soon. Also prints out the current standings as in {COMMAND_PREFIX}standings')
 @admin_func
 @log_function_call
 async def drawprep(context, *args):
@@ -167,7 +168,7 @@ async def drawprep(context, *args):
     standings()
 
 
-@bot.command(name='draw', help='')
+@bot.command(name='draw', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}draw\nDraws one winner from the group proportional to the number of tickets available for each person. The winning ticket is removed from the pot.')
 @admin_func
 @log_function_call
 async def draw(context, *args):
@@ -182,22 +183,24 @@ async def draw(context, *args):
         return
 
     winner = choice(all_entries)
+    game_state[winner].tickets_available -= 1
     await log(f'Winner: {winner}')
     await context.send(f'And the winner is {winner.mention}!!')
 
 
-@bot.command(name='settleall', help='')
+@bot.command(name='settleall', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}settleall\nLogs the amount owed by each person and the total amount to be collected.')
 @admin_func
 @log_function_call
 async def settleall(context, *args):
     total = 0
     for user, state in game_state.items():
+        await user.send(f'Your current total amount owed is ${state.amount_owed}. Be sure to send this amount to the venmo account {VENMO_USERNAMES_FOR_DONATIONS} by the end of the event!')
         await log(f'{user}: ${state.amount_owed}')
         total += state.amount_owed
     await log(f'total: ${total}')
 
 
-@bot.command(name='resetuser', help='')
+@bot.command(name='resetuser', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}resetuser <mention 1 or more users>\nResets each user\'s game state to 0 - used for troubleshooting only')
 @admin_func
 @log_function_call
 async def resetuser(context, *args):
@@ -206,7 +209,7 @@ async def resetuser(context, *args):
         await send_user_game_state(mention)
 
 
-@bot.command(name='bet', help='')
+@bot.command(name='bet', help=f'usage: {COMMAND_PREFIX}bet <number of tickets each person is betting> <mention all participants, including yourself>\nCreate a bet to start a game. Bets can only be created by an admin or a participant.')
 @log_function_call
 async def bet(context, charge_amt: int, *args):
     try:
@@ -258,7 +261,7 @@ async def bet(context, charge_amt: int, *args):
     await log(f'Bet {bet_id} created for {charge_amt} each, {bet["amount"]} total with users {", ".join([x.display_name for x in context.message.mentions])}')
 
 
-@bot.command(name='won', help='')
+@bot.command(name='won', help=f'usage: {COMMAND_PREFIX}won <bet id> <mention all winners>\nCloses an open bet identified by the bet id given. The bet pool is split evenly among all winners mentioned. If it cannot be split evenly, the remainder is given to the first mention(s) in the order given.')
 @log_function_call
 async def won(context, bet_id: int, *args):
     try:
@@ -315,7 +318,7 @@ async def won(context, bet_id: int, *args):
     await log(f'Bet {bet_id} completed with winners {", ".join([x.display_name for x in context.message.mentions])}')
 
 
-@bot.command(name='standings', help='')
+@bot.command(name='standings', help=f'usage: {COMMAND_PREFIX}standings\nPrints the current standings in order.')
 @log_function_call
 async def standings(context, *args):
     FORMAT_STRING = '\n{rank:4d} {name} {tickets} ticket{ticket_s}'
