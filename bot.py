@@ -163,6 +163,7 @@ async def drawprep(context, *args):
         await user.send('The drawing is about to happen! Get in your final bets and buyins!')
         await send_user_game_state(user)
         ### send open bets
+    standings()
 
 
 @bot.command(name='draw', help='')
@@ -311,5 +312,24 @@ async def won(context, bet_id: int, *args):
 
     await context.send(f'Bet {bet_id} completed with the winners: {", ".join([x.display_name for x in context.message.mentions])}. Congrats!')
     await log(f'Bet {bet_id} completed with winners {", ".join([x.display_name for x in context.message.mentions])}')
+
+
+@bot.command(name='standings', help='')
+@log_function_call
+async def standings(context, *args):
+    FORMAT_STRING = '\n{rank:4d} {name} {tickets} ticket{ticket_s}'
+    current_standings = 'Current standings:'
+    count = 1
+
+    for user, user_state in sorted(game_state.items(), key=lambda item: item[1].tickets_available, reverse=True):
+        current_standings += FORMAT_STRING.format(rank=count,
+                                                  name=user.mention,
+                                                  tickets=user_state.tickets_available,
+                                                  ticket_s='' if user_state.tickets_available == 1 else 's')
+        count += 1
+
+    await context.send(current_standings)
+    await log(f'Standings output')
+
 
 bot.run(getenv("TOKEN"))
