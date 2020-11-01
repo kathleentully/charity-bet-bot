@@ -10,7 +10,7 @@ import traceback
 load_dotenv()
 
 ADMIN_USERS = [int(x) for x in getenv("ADMIN_USERS").split(",")]
-COMMAND_PREFIX = '!!'
+COMMAND_PREFIX = '!'
 game_state = {}
 Deal = namedtuple('Deal', 'price tickets')
 #should be ordered high to low, too lazy to enforce
