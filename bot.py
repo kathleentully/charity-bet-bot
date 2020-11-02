@@ -6,6 +6,7 @@ from os import getenv
 from random import choice
 import traceback 
 
+from file_management import save_game_state, load_game_state
 from UserState import UserState, EVENT_PRICES
 
 load_dotenv()
@@ -71,6 +72,13 @@ def log_function_call(func):
     return wrapper
 
 
+def save_state(func):
+    async def wrapper(context, *args):
+        await func(context, *args)
+        save_game_state(game_state, open_bets, used_bet_ids)
+    return wrapper
+
+
 async def send_user_game_state(user):
     await user.send(f'You are registered with {game_state[user].tickets_available} tickets available and you owe ${game_state[user].amount_owed}')
     if game_state[user].bets:
@@ -86,6 +94,13 @@ async def on_ready():
     log_channel = bot.get_channel(int(getenv("LOG_CHANNEL")))
     await log(f'Bot connected as {bot.user}')
 
+
+@bot.command(name='load', help=f'usage: {COMMAND_PREFIX}load <optional: filename>\nSpecify the amount of money you are spending and you will be given the correct amount of tickets.\nTickets prices are {", ".join([f"${x.price} for {x.tickets} tickets" for x in EVENT_PRICES])}\nYou may buy in multiple times to replenish your tickets as needed. Deals will not be applied retroactively.\nYou can always check how much money you owe by using the command {COMMAND_PREFIX}status')
+@log_function_call
+@admin_func
+async def load(context, file_name: str=None):
+    global game_state, open_bets, used_bet_ids
+    game_state, open_bets, used_bet_ids = load_game_state(bot, file_name)
 
 
 @bot.command(name='register', help=f'usage: {COMMAND_PREFIX}register\nRegister as a participant without buying in yet')
@@ -110,6 +125,7 @@ async def status(context):
 
 @bot.command(name='buyin', help=f'usage: {COMMAND_PREFIX}buyin <amount of money>\nSpecify the amount of money you are spending and you will be given the correct amount of tickets.\nTickets prices are {", ".join([f"${x.price} for {x.tickets} tickets" for x in EVENT_PRICES])}\nYou may buy in multiple times to replenish your tickets as needed. Deals will not be applied retroactively.\nYou can always check how much money you owe by using the command {COMMAND_PREFIX}status')
 @log_function_call
+@save_state
 async def buyin(context, charge_amt: int):
     global game_state
     if context.message.author not in game_state:    
@@ -144,6 +160,7 @@ async def drawprep(context, *args):
 @bot.command(name='draw', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}draw\nDraws one winner from the group proportional to the number of tickets available for each person. The winning ticket is removed from the pot.')
 @admin_func
 @log_function_call
+@save_state
 async def draw(context, *args):
     all_entries = []
     for user, state in game_state.items():
@@ -176,6 +193,7 @@ async def settleall(context, *args):
 @bot.command(name='resetuser', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}resetuser <mention 1 or more users>\nResets each user\'s game state to 0 - used for troubleshooting only')
 @admin_func
 @log_function_call
+@save_state
 async def resetuser(context, *args):
     for mention in context.message.mentions:
         game_state[mention] = UserState()
@@ -184,6 +202,7 @@ async def resetuser(context, *args):
 
 @bot.command(name='bet', help=f'usage: {COMMAND_PREFIX}bet <number of tickets each person is betting> <mention all participants, including yourself>\nCreate a bet to start a game. Bets can only be created by an admin or a participant.')
 @log_function_call
+@save_state
 async def bet(context, charge_amt: int, *args):
     try:
         charge_amt = int(charge_amt.strip())
@@ -236,6 +255,7 @@ async def bet(context, charge_amt: int, *args):
 
 @bot.command(name='won', help=f'usage: {COMMAND_PREFIX}won <bet id> <mention all winners>\nCloses an open bet identified by the bet id given. The bet pool is split evenly among all winners mentioned. If it cannot be split evenly, the remainder is given to the first mention(s) in the order given.')
 @log_function_call
+@save_state
 async def won(context, bet_id: int, *args):
     try:
         bet_id = int(bet_id.strip())
