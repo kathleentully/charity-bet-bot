@@ -18,7 +18,7 @@ def save_game_state(game_state, open_bets, used_bet_ids):
         }, save_file)
 
 
-def load_game_state(bot, file_name=None):
+async def load_game_state(bot, file_name=None):
     if not file_name:
         files = sorted([candidate_file for candidate_file in os.listdir() if candidate_file.endswith(FILE_SUFFIX)], reverse=True)
         if not files:
@@ -27,12 +27,12 @@ def load_game_state(bot, file_name=None):
         
     with open(file_name, 'r') as load_file:
         full_game_state = json.load(load_file)
-        return ({bot.get_user(user_id): UserState(tickets_available=user_state["tickets_available"],
+        return ({await bot.fetch_user(int(user_id)): UserState(tickets_available=user_state["tickets_available"],
                                                       amount_owed=user_state["amount_owed"],
                                                       bets=user_state["bets"]
                                                      ) for user_id, user_state in full_game_state["game_state"].items()},
-                {bet_id: {
+                {await bet_id: {
                     "amount": bet_info["amount"],
-                    "participants": [bot.get_user(participant_id) for participant_id in bet_info["participants"]]
+                    "participants": [await bot.fetch_user(participant_id) for participant_id in bet_info["participants"]]
                 } for bet_id, bet_info in full_game_state["open_bets"].items()},
                 set(full_game_state["used_bet_ids"]))

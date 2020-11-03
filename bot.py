@@ -40,7 +40,7 @@ def get_new_bet_id():
     new_bet_id = bet_id_cursor
     while new_bet_id in used_bet_ids:
         bet_id_cursor += 1
-        new_bet_id = bet_id_cursor
+        new_bet_id = str(bet_id_cursor)
     used_bet_ids.add(new_bet_id)
 
     bet_id_semaphore = True
@@ -92,6 +92,9 @@ async def send_user_game_state(user):
 async def on_ready():
     global log_channel
     log_channel = bot.get_channel(int(getenv("LOG_CHANNEL")))
+    print(f'get_user: { bot.get_user(129448672894124032)}')
+    print(f'fetch_user: {await bot.fetch_user(129448672894124032)}')
+    print(f'get channels: {list(bot.get_all_channels())}')
     await log(f'Bot connected as {bot.user}')
 
 
@@ -100,7 +103,7 @@ async def on_ready():
 @admin_func
 async def load(context, file_name: str=None):
     global game_state, open_bets, used_bet_ids
-    game_state, open_bets, used_bet_ids = load_game_state(bot, file_name)
+    game_state, open_bets, used_bet_ids = await load_game_state(bot, file_name)
 
 
 @bot.command(name='register', help=f'usage: {COMMAND_PREFIX}register\nRegister as a participant without buying in yet')
@@ -184,7 +187,7 @@ async def draw(context, *args):
 async def settleall(context, *args):
     total = 0
     for user, state in game_state.items():
-        await user.send(f'Your current total amount owed is ${state.amount_owed}. Be sure to send this amount to the venmo account {VENMO_USERNAMES_FOR_DONATIONS} by the end of the event!')
+        await user.send(f'Your current total amount owed is ${state.amount_owed}. Be sure to send this amount to the venmo account {VENMO_USERNAME_FOR_DONATIONS} by the end of the event!')
         await log(f'{user}: ${state.amount_owed}')
         total += state.amount_owed
     await log(f'total: ${total}')
@@ -218,16 +221,21 @@ async def bet(context, charge_amt: int, *args):
         return
 
 
+    if len(args) > len(context.message.mentions):
+        game_name = args[0]
+
     should_cancel = False
     for mention in context.message.mentions:
         if mention not in game_state:
             should_cancel = True
             await log(f'Failed to create bet because {mention} is not registered.')
             await mention.send(f'You are not registered and therefore do not have enough tickets available to place this bet. Use {context.prefix}buyin <amount of money> to add more tickets and try again.')
+            await context.send('Not everyone is registered for the game. Buy in first and try again.')
         elif game_state[mention].tickets_available < charge_amt:
             should_cancel = True
             await log(f'Failed to create bet because {mention} only has {game_state[mention].tickets_available} tickets available.')
             await mention.send(f'You do not have enough tickets available to place this bet. Use {context.prefix}buyin <amount of money> to add more tickets and try again.')
+            await context.send('Not everyone has enough tickets for this bet. Buy in first and try again.')
     if should_cancel:
         await log(f'Bet canceled')
         return
@@ -258,7 +266,7 @@ async def bet(context, charge_amt: int, *args):
 @save_state
 async def won(context, bet_id: int, *args):
     try:
-        bet_id = int(bet_id.strip())
+        bet_id = str(int(bet_id.strip()))
     except:
         await log(f'Failed to convert first argument [{bet_id}] to an int')
         await context.message.author.send(f'Invalid input value. Please input a whole number value.')
@@ -276,13 +284,13 @@ async def won(context, bet_id: int, *args):
     bet = open_bets[bet_id]
 
     if context.message.author not in bet["participants"] or not is_admin(context.message.author):
-        await log(f'Failed to close bet because {context.message.author} is not in the betting group {", ".join([p.display_name for b in bet["participants"]])} and not an admin')
+        await log(f'Failed to close bet because {context.message.author} is not in the betting group {", ".join([p.display_name for p in bet["participants"]])} and not an admin')
         await context.send(f'{context.message.author.mention} You do not have permissions to close bets for other people.')
         return
 
     for mention in context.message.mentions:
         if mention not in bet["participants"]:
-            await log(f'Failed to close bet because {mention} is not in the betting group {", ".join([p.display_name for b in bet["participants"]])}')
+            await log(f'Failed to close bet because {mention} is not in the betting group {", ".join([p.display_name for p in bet["participants"]])}')
             await context.send(f'{mention} cannot win a bet in which they were not participants.')
             return
 
