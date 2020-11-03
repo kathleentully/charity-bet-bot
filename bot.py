@@ -13,6 +13,8 @@ load_dotenv()
 
 ADMIN_USERS = [int(x) for x in getenv("ADMIN_USERS").split(",")]
 COMMAND_PREFIX = '!'
+MSG_SIZE_LIMIT = 1500
+MSG_COUNT_LIMIT = 5
 game_state = {}
 
 VENMO_USERNAME_FOR_DONATIONS = f'@{getenv("VENMO_USERNAME")}'
@@ -26,7 +28,11 @@ bot = Bot(command_prefix=COMMAND_PREFIX)
 
 async def log(msg):
     if log_channel:
-        await log_channel.send(f'LOG: {msg}')
+        split_count = 0
+        while len(msg) > 0 and split_count < MSG_COUNT_LIMIT:
+            await log_channel.send(f'LOG: {msg[:MSG_SIZE_LIMIT]}')
+            msg = msg[MSG_SIZE_LIMIT:]
+            split_count += 1
     else:
         print(msg)
 
