@@ -104,9 +104,6 @@ async def send_user_game_state(user):
 async def on_ready():
     global log_channel
     log_channel = bot.get_channel(int(getenv("LOG_CHANNEL")))
-    print(f'get_user: { bot.get_user(129448672894124032)}')
-    print(f'fetch_user: {await bot.fetch_user(129448672894124032)}')
-    print(f'get channels: {list(bot.get_all_channels())}')
     await log(f'Bot connected as {bot.user}')
 
 
