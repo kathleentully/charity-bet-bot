@@ -214,7 +214,7 @@ async def resetuser(context, *args):
         await send_user_game_state(mention)
 
 
-@bot.command(name='bet', help=f'usage: {COMMAND_PREFIX}bet <number of tickets each person is betting> <mention all participants, including yourself>\nCreate a bet to start a game. Bets can only be created by an admin or a participant.')
+@bot.command(name='bet', help=f'usage: {COMMAND_PREFIX}bet <number of tickets each person is betting> <optional one word bet name> <mention all participants, including yourself>\nCreate a bet to start a game. Bets can only be created by an admin or a participant.')
 @log_function_call
 @save_state
 async def bet(context, charge_amt: int, *args):
@@ -287,7 +287,7 @@ def find_bet_by_game_name(author, game_name):
     return None
             
 
-@bot.command(name='won', help=f'usage: {COMMAND_PREFIX}won <bet id> <mention all winners>\nCloses an open bet identified by the bet id given. The bet pool is split evenly among all winners mentioned. If it cannot be split evenly, the remainder is given to the first mention(s) in the order given.')
+@bot.command(name='won', help=f'usage: {COMMAND_PREFIX}won <bet id or game name> <mention all winners>\nCloses an open bet identified by the bet id given. The bet pool is split evenly among all winners mentioned. If it cannot be split evenly, the remainder is given to the first mention(s) in the order given.\nIf completely the bet as an admin and not a participant, you must use the bet id number')
 @log_function_call
 @save_state
 async def won(context, bet_id_or_name: int, *args):
