@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 import discord
-from discord.ext.commands import Bot
+from discord.ext import commands
 from math import floor
 from os import getenv
 from random import choice
@@ -11,7 +11,7 @@ from UserState import UserState, EVENT_PRICES
 
 load_dotenv()
 
-ADMIN_USERS = [int(x) for x in getenv("ADMIN_USERS").split(",")]
+BOT_ADMIN_ROLE_ID = int(getenv('BOT_ADMIN_ROLE_ID'))
 COMMAND_PREFIX = '!'
 MSG_SIZE_LIMIT = 1500
 MSG_COUNT_LIMIT = 5
@@ -23,7 +23,7 @@ bet_id_cursor = 0
 used_bet_ids = set()
 bet_id_semaphore = True # green light
 log_channel = None
-bot = Bot(command_prefix=COMMAND_PREFIX)
+bot = commands.Bot(command_prefix=COMMAND_PREFIX)
 
 
 async def log(msg):
@@ -54,7 +54,13 @@ def get_new_bet_id():
 
 
 def is_admin(user):
-    return user.id in ADMIN_USERS
+    try:
+        for role in user.roles:
+            if role.id == BOT_ADMIN_ROLE_ID:
+                return True
+    except:
+        pass
+    return False
 
 
 def admin_func(func):
@@ -106,7 +112,7 @@ async def on_ready():
 
 @bot.command(name='load', help=f'usage: {COMMAND_PREFIX}load <optional: filename>\nSpecify the amount of money you are spending and you will be given the correct amount of tickets.\nTickets prices are {", ".join([f"${x.price} for {x.tickets} tickets" for x in EVENT_PRICES])}\nYou may buy in multiple times to replenish your tickets as needed. Deals will not be applied retroactively.\nYou can always check how much money you owe by using the command {COMMAND_PREFIX}status')
 @log_function_call
-@admin_func
+@commands.has_role(BOT_ADMIN_ROLE_ID)
 async def load(context, file_name: str=None):
     global game_state, open_bets, used_bet_ids
     game_state, open_bets, used_bet_ids = await load_game_state(bot, file_name)
@@ -126,9 +132,11 @@ async def register(context):
 @bot.command(name='status', help=f'usage: {COMMAND_PREFIX}status\nGet your current status (money owed, tickets available, and open bets) in a private message')
 @log_function_call
 async def status(context):
+    print(context.guild.roles)
     global game_state
     if context.message.author not in game_state:
         await context.message.author.send(f'You are not registered. Use {context.prefix}register to register')
+        return
     await send_user_game_state(context.message.author)
 
 
@@ -155,7 +163,7 @@ async def buyin(context, charge_amt: int):
 
 
 @bot.command(name='drawprep', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}drawprep\nSends a message to all particpants detailing their current status and announcing the drawing will be happening soon. Also prints out the current standings as in {COMMAND_PREFIX}standings')
-@admin_func
+@commands.has_role(BOT_ADMIN_ROLE_ID)
 @log_function_call
 async def drawprep(context, *args):
     for user in game_state.keys():
@@ -167,7 +175,7 @@ async def drawprep(context, *args):
 
 
 @bot.command(name='draw', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}draw\nDraws one winner from the group proportional to the number of tickets available for each person. The winning ticket is removed from the pot.')
-@admin_func
+@commands.has_role(BOT_ADMIN_ROLE_ID)
 @log_function_call
 @save_state
 async def draw(context, *args):
@@ -188,7 +196,7 @@ async def draw(context, *args):
 
 
 @bot.command(name='settleall', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}settleall\nLogs the amount owed by each person and the total amount to be collected.')
-@admin_func
+@commands.has_role(BOT_ADMIN_ROLE_ID)
 @log_function_call
 async def settleall(context, *args):
     total = 0
@@ -200,7 +208,7 @@ async def settleall(context, *args):
 
 
 @bot.command(name='resetuser', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}resetuser <mention 1 or more users>\nResets each user\'s game state to 0 - used for troubleshooting only')
-@admin_func
+@commands.has_role(BOT_ADMIN_ROLE_ID)
 @log_function_call
 @save_state
 async def resetuser(context, *args):
