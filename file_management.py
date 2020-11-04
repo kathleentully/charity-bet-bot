@@ -12,7 +12,8 @@ def save_game_state(game_state, open_bets, used_bet_ids):
             "game_state": {user.id: user_state.__dict__ for user, user_state in game_state.items()},
             "open_bets": {bet_id: {
                 "amount": bet_info["amount"],
-                "participants": [participant.id for participant in bet_info["participants"]]
+                "participants": [participant.id for participant in bet_info["participants"]],
+                "game_name": bet_info.get("game_name")
             } for bet_id, bet_info in open_bets.items()},
             "used_bet_ids": list(used_bet_ids)
         }, save_file)
@@ -27,12 +28,19 @@ async def load_game_state(bot, file_name=None):
         
     with open(file_name, 'r') as load_file:
         full_game_state = json.load(load_file)
+        open_bets = {}
+        for bet_id, bet_info in full_game_state["open_bets"].items():
+            open_bets[bet_id] = {
+                "amount": bet_info["amount"],
+                "participants": [await bot.fetch_user(participant_id) for participant_id in bet_info["participants"]]
+            }
+            if bet_info.get("game_name"):
+                open_bets[bet_id]["game_name"] = bet_info.get("game_name")
+
+        
         return ({await bot.fetch_user(int(user_id)): UserState(tickets_available=user_state["tickets_available"],
                                                       amount_owed=user_state["amount_owed"],
                                                       bets=user_state["bets"]
                                                      ) for user_id, user_state in full_game_state["game_state"].items()},
-                {await bet_id: {
-                    "amount": bet_info["amount"],
-                    "participants": [await bot.fetch_user(participant_id) for participant_id in bet_info["participants"]]
-                } for bet_id, bet_info in full_game_state["open_bets"].items()},
+                open_bets,
                 set(full_game_state["used_bet_ids"]))

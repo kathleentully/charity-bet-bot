@@ -43,7 +43,7 @@ def get_new_bet_id():
         continue
     bet_id_semaphore = False
 
-    new_bet_id = bet_id_cursor
+    new_bet_id = str(bet_id_cursor)
     while new_bet_id in used_bet_ids:
         bet_id_cursor += 1
         new_bet_id = str(bet_id_cursor)
@@ -226,32 +226,40 @@ async def bet(context, charge_amt: int, *args):
         await context.message.author.send(f'You do not have permissions to create bets for other people. If you meant to enter a bet including yourself, be sure to mention yourself.')
         return
 
+    
+    bet = {
+        "amount": 0,
+        "participants": []
+    }
 
     if len(args) > len(context.message.mentions):
-        game_name = args[0]
+        bet["game_name"] = args[0].strip().lower()
+
 
     should_cancel = False
+    cancel_note = ''
     for mention in context.message.mentions:
         if mention not in game_state:
             should_cancel = True
             await log(f'Failed to create bet because {mention} is not registered.')
             await mention.send(f'You are not registered and therefore do not have enough tickets available to place this bet. Use {context.prefix}buyin <amount of money> to add more tickets and try again.')
-            await context.send('Not everyone is registered for the game. Buy in first and try again.')
+            cancel_note = 'Not everyone is registered for the game. Buy in first and try again.'
         elif game_state[mention].tickets_available < charge_amt:
             should_cancel = True
             await log(f'Failed to create bet because {mention} only has {game_state[mention].tickets_available} tickets available.')
             await mention.send(f'You do not have enough tickets available to place this bet. Use {context.prefix}buyin <amount of money> to add more tickets and try again.')
-            await context.send('Not everyone has enough tickets for this bet. Buy in first and try again.')
+            cancel_note = 'Not everyone has enough tickets for this bet. Buy in first and try again.'
+        elif bet.get("game_name") and find_bet_by_game_name(mention, bet.get("game_name")):
+            should_cancel = True
+            await log(f'Failed to create bet because {mention} is already participating in a game named {bet.get("game_name")}.')
+            await mention.send(f'You are already in a game named {bet.get("game_name")}. Use another name!')
+            cancel_note = f'Someone in this bet is participating in another bet named {bet.get("game_name")}. Close out that bet or name this bet differently.'
     if should_cancel:
         await log(f'Bet canceled')
+        await context.send(cancel_note)
         return
 
-
     bet_id = get_new_bet_id()
-    bet = {
-        "amount": 0,
-        "participants": []
-    }
 
     for mention in context.message.mentions:
         bet["amount"] += charge_amt
@@ -262,21 +270,30 @@ async def bet(context, charge_amt: int, *args):
     open_bets[bet_id] = bet
 
     for mention in context.message.mentions:
-        await mention.send(f'You have bet {charge_amt} tickets on bet id {bet_id}. When the game is over, any participant can finalize the win by typing {context.prefix}won {bet_id} <mention winning user(s) on one line>\nIf the amount cannot be split evenly, the remainder will be shared in the order the users are mentioned.')
-    await context.send(f'Bet {bet_id} created for {bet["amount"]} total with users {", ".join([x.display_name for x in context.message.mentions])}. GLHF!')
-    await log(f'Bet {bet_id} created for {charge_amt} each, {bet["amount"]} total with users {", ".join([x.display_name for x in context.message.mentions])}')
+        await mention.send(f'You have bet {charge_amt} tickets on bet id {bet_id}{" named [" + bet.get("game_name") + "]" if "game_name" in bet else ""}. When the game is over, any participant can finalize the win by typing {context.prefix}won {bet.get("game_name", bet_id)} <mention winning user(s) on one line>\nIf the amount cannot be split evenly, the remainder will be shared in the order the users are mentioned.')
+    await context.send(f'Bet {bet_id}{" named [" + bet.get("game_name") + "]" if "game_name" in bet else ""} created for {bet["amount"]} tickets with users {", ".join([x.display_name for x in context.message.mentions])}. GLHF!')
+    await log(f'Bet {bet_id}[{bet.get("game_name")}] created for {charge_amt} each, {bet["amount"]} tickets with users {", ".join([x.display_name for x in context.message.mentions])}')
 
+
+def find_bet_by_game_name(author, game_name):
+    for bet_id_candidate in game_state[author].bets:
+        if open_bets[bet_id_candidate].get("game_name") == game_name.strip().lower():
+            return bet_id_candidate
+    return None
+            
 
 @bot.command(name='won', help=f'usage: {COMMAND_PREFIX}won <bet id> <mention all winners>\nCloses an open bet identified by the bet id given. The bet pool is split evenly among all winners mentioned. If it cannot be split evenly, the remainder is given to the first mention(s) in the order given.')
 @log_function_call
 @save_state
-async def won(context, bet_id: int, *args):
+async def won(context, bet_id_or_name: int, *args):
     try:
-        bet_id = str(int(bet_id.strip()))
+        bet_id = str(int(bet_id_or_name.strip()))
     except:
-        await log(f'Failed to convert first argument [{bet_id}] to an int')
-        await context.message.author.send(f'Invalid input value. Please input a whole number value.')
-        return
+        bet_id = find_bet_by_game_name(context.message.author, bet_id_or_name)
+        
+    if bet_id is None:
+        await log(f'Failed to find bet {bet_id_or_name}')
+        await context.message.author.send(f'Failed to find bet {bet_id_or_name}')
 
     if bet_id not in open_bets:
         if bet_id in used_bet_ids:
@@ -341,6 +358,23 @@ async def standings(context, *args):
 
     await context.send(current_standings)
     await log(f'Standings output')
+
+@bot.command(name='openbets', help=f'usage: {COMMAND_PREFIX}openbets\nPrints the open bets in order they were created.')
+@log_function_call
+async def openbets(context, *args):
+    FORMAT_STRING = '\n{id:4d} {name} {tickets} tickets: {participants}'
+    current_open_bets = 'Open bets:'
+
+    for bet_id, bet_info in open_bets.items():
+        current_open_bets += FORMAT_STRING.format(id=int(bet_id),
+                                                  name=bet_info.get("game_name", "-"),
+                                                  tickets=bet_info["amount"],
+                                                  participants=' '.join([p.mention for p in bet_info["participants"]]))
+
+
+    await context.send(current_open_bets)
+    await log(f'Open bets output')
+
 
 
 bot.run(getenv("TOKEN"))
