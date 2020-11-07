@@ -112,14 +112,6 @@ async def on_ready():
     await log(f'Bot connected as {bot.user}')
 
 
-@bot.command(name='load', help=f'usage: {COMMAND_PREFIX}load <optional: filename>\nSpecify the amount of money you are spending and you will be given the correct amount of tickets.\nTickets prices are {", ".join([f"${x.price} for {x.tickets} tickets" for x in EVENT_PRICES])}\nYou may buy in multiple times to replenish your tickets as needed. Deals will not be applied retroactively.\nYou can always check how much money you owe by using the command {COMMAND_PREFIX}status')
-@log_function_call
-@commands.has_role(BOT_ADMIN_ROLE_ID)
-async def load(context, file_name: str=None):
-    global game_state, open_bets, used_bet_ids
-    game_state, open_bets, used_bet_ids = await load_game_state(bot, file_name)
-
-
 @bot.command(name='register', help=f'usage: {COMMAND_PREFIX}register\nRegister as a participant without buying in yet')
 @log_function_call
 async def register(context):
@@ -426,6 +418,15 @@ async def draw(context, *args):
     game_state[winner].tickets_available -= 1
     await log(f'Winner: {winner}')
     await context.send(f'And the winner is {winner.mention}!!')
+
+
+@bot.command(name='load', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}load <optional: filename>\nSpecify the amount of money you are spending and you will be given the correct amount of tickets.\nTickets prices are {", ".join([f"${x.price} for {x.tickets} tickets" for x in EVENT_PRICES])}\nYou may buy in multiple times to replenish your tickets as needed. Deals will not be applied retroactively.\nYou can always check how much money you owe by using the command {COMMAND_PREFIX}status')
+@commands.has_role(BOT_ADMIN_ROLE_ID)
+@log_function_call
+@commands.has_role(BOT_ADMIN_ROLE_ID)
+async def load(context, file_name: str=None):
+    global game_state, open_bets, used_bet_ids
+    game_state, open_bets, used_bet_ids = await load_game_state(bot, file_name)
 
 
 bot.run(getenv("TOKEN"))
