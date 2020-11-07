@@ -92,7 +92,12 @@ def save_state(func):
 
 
 async def send_user_game_state(user):
-    await user.send(f'You are registered with {game_state[user].tickets_available} tickets available and you owe ${game_state[user].amount_owed}')
+    user_state_str = f'You are registered with {game_state[user].tickets_available} tickets available'
+    if game_state[user].amount_owed:
+        user_state_str += f', you owe ${game_state[user].amount_owed}' 
+    if game_state[user].paid:
+        user_state_str += f' and you\'ve paid ${game_state[user].paid}'
+    await user.send(user_state_str)
     if game_state[user].bets:
         bet_string = ''
         for bet_id in game_state[user].bets:
@@ -157,61 +162,6 @@ async def buyin(context, charge_amt: int):
 
     await log(f'{context.message.author}: amount owed: ${game_state[context.message.author].amount_owed}, tickets: {game_state[context.message.author].tickets_available} | bought in ${charge_amt}')
     await send_user_game_state(context.message.author)
-
-
-@bot.command(name='drawprep', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}drawprep\nSends a message to all particpants detailing their current status and announcing the drawing will be happening soon. Also prints out the current standings as in {COMMAND_PREFIX}standings')
-@commands.has_role(BOT_ADMIN_ROLE_ID)
-@log_function_call
-async def drawprep(context, *args):
-    for user in game_state.keys():
-        await user.send('The drawing is about to happen! Get in your final bets and buyins!')
-        await send_user_game_state(user)
-        if game_state[user].open_bets:
-            user.send('Be sure to close all open bets before the drawing. Tickets in open bet pools are lost when the winners are drawn!')
-    standings()
-
-
-@bot.command(name='draw', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}draw\nDraws one winner from the group proportional to the number of tickets available for each person. The winning ticket is removed from the pot.')
-@commands.has_role(BOT_ADMIN_ROLE_ID)
-@log_function_call
-@save_state
-async def draw(context, *args):
-    all_entries = []
-    for user, state in game_state.items():
-        all_entries += [user] * state.tickets_available
-        await log(f'{user}: {state.tickets_available}')
-    await log(f'Entries in drawing: {", ".join([entry.display_name for entry in all_entries])}')
-
-    if not len(all_entries):
-        await log('No entries, no winner')
-        return
-
-    winner = choice(all_entries)
-    game_state[winner].tickets_available -= 1
-    await log(f'Winner: {winner}')
-    await context.send(f'And the winner is {winner.mention}!!')
-
-
-@bot.command(name='settleall', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}settleall\nLogs the amount owed by each person and the total amount to be collected.')
-@commands.has_role(BOT_ADMIN_ROLE_ID)
-@log_function_call
-async def settleall(context, *args):
-    total = 0
-    for user, state in game_state.items():
-        await user.send(f'Your current total amount owed is ${state.amount_owed}. Be sure to send this amount to the venmo account {VENMO_USERNAME_FOR_DONATIONS} by the end of the event!')
-        await log(f'{user}: ${state.amount_owed}')
-        total += state.amount_owed
-    await log(f'total: ${total}')
-
-
-@bot.command(name='resetuser', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}resetuser <mention 1 or more users>\nResets each user\'s game state to 0 - used for troubleshooting only')
-@commands.has_role(BOT_ADMIN_ROLE_ID)
-@log_function_call
-@save_state
-async def resetuser(context, *args):
-    for mention in context.message.mentions:
-        game_state[mention] = UserState()
-        await send_user_game_state(mention)
 
 
 @bot.command(name='bet', help=f'usage: {COMMAND_PREFIX}bet <number of tickets each person is betting> <optional one word bet name> <mention all participants, including yourself>\nCreate a bet to start a game. Bets can only be created by an admin or a participant.')
@@ -380,6 +330,102 @@ async def openbets(context, *args):
     await context.send(current_open_bets)
     await log(f'Open bets output')
 
+
+@bot.command(name='paid', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}paid <amount> <mention 1 or more users>\nMarks users as having paid the amount given')
+@commands.has_role(BOT_ADMIN_ROLE_ID)
+@log_function_call
+@save_state
+async def paid(context, amount:int, *args):
+    try:
+        amount = int(amount.strip().lstrip('$'))
+    except:
+        await log(f'Failed to convert first argument [{amount}] to an int')
+        await context.message.author.send(f'Invalid input value. Please input a whole number value.')
+        return
+    for mention in context.message.mentions:
+        game_state[mention].pay(amount)
+        await log(f'{mention.mention} has now paid ${game_state[mention].paid} and still owes ${game_state[mention].amount_owed}')
+        await send_user_game_state(mention)
+
+
+@bot.command(name='set', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}set <ticket count> <amount owed> <amount paid> <mention 1 or more users>\nSets users to a given state')
+@commands.has_role(BOT_ADMIN_ROLE_ID)
+@log_function_call
+@save_state
+async def set(context, ticket_count:int, amount_owed:int, amount_paid:int, *args):
+    try:
+        ticket_count = int(ticket_count.strip())
+        amount_owed = int(amount_owed.strip().lstrip('$'))
+        amount_paid = int(amount_paid.strip().lstrip('$'))
+    except:
+        await log(f'Failed to convert first argument [{ticket_count}, {amount_owed}, or {amount_paid}] to an int')
+        await context.message.author.send(f'Invalid input value. Please input a whole number value.')
+        return
+    for mention in context.message.mentions:
+        game_state[mention] = UserState(tickets_available=ticket_count, amount_owed=amount_owed, paid=amount_paid)
+        await log(f'{mention.mention} set to {game_state[mention].tickets_available} tickets, ${game_state[mention].amount_owed} owed, ${game_state[mention].paid} paid')
+        await send_user_game_state(mention)
+
+
+@bot.command(name='settleall', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}settleall\nLogs the amount owed by each person and the total amount to be collected.')
+@commands.has_role(BOT_ADMIN_ROLE_ID)
+@log_function_call
+async def settleall(context, *args):
+    total_owed = 0
+    total_paid = 0
+
+    for user, state in game_state.items():
+        if state.amount_owed > 0:
+            await user.send(f'Your current total amount owed is ${state.amount_owed}. Be sure to send this amount to the venmo account {VENMO_USERNAME_FOR_DONATIONS} or donate directly via one of the Extra Life links in #welcome by the end of the event!')
+            if state.paid > 0:
+                await user.send(f'You have already paid ${state.paid}.')
+        await log(f'{user}: owes ${state.amount_owed}, paid ${state.paid}')
+        total_owed += state.amount_owed
+        total_paid += state.paid
+    await log(f'total owed: ${total_owed}, total paid: ${total_paid}')
+
+
+@bot.command(name='resetuser', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}resetuser <mention 1 or more users>\nResets each user\'s game state to 0 - used for troubleshooting only')
+@commands.has_role(BOT_ADMIN_ROLE_ID)
+@log_function_call
+@save_state
+async def resetuser(context, *args):
+    for mention in context.message.mentions:
+        game_state[mention] = UserState()
+        await send_user_game_state(mention)
+
+
+@bot.command(name='drawprep', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}drawprep\nSends a message to all particpants detailing their current status and announcing the drawing will be happening soon. Also prints out the current standings as in {COMMAND_PREFIX}standings')
+@commands.has_role(BOT_ADMIN_ROLE_ID)
+@log_function_call
+async def drawprep(context, *args):
+    for user in game_state.keys():
+        await user.send('The drawing is about to happen! Get in your final bets and buyins!')
+        await send_user_game_state(user)
+        if game_state[user].open_bets:
+            user.send('Be sure to close all open bets before the drawing. Tickets in open bet pools are lost when the winners are drawn!')
+    standings()
+
+
+@bot.command(name='draw', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}draw\nDraws one winner from the group proportional to the number of tickets available for each person. The winning ticket is removed from the pot.')
+@commands.has_role(BOT_ADMIN_ROLE_ID)
+@log_function_call
+@save_state
+async def draw(context, *args):
+    all_entries = []
+    for user, state in game_state.items():
+        all_entries += [user] * state.tickets_available
+        await log(f'{user}: {state.tickets_available}')
+    await log(f'Entries in drawing: {", ".join([entry.display_name for entry in all_entries])}')
+
+    if not len(all_entries):
+        await log('No entries, no winner')
+        return
+
+    winner = choice(all_entries)
+    game_state[winner].tickets_available -= 1
+    await log(f'Winner: {winner}')
+    await context.send(f'And the winner is {winner.mention}!!')
 
 
 bot.run(getenv("TOKEN"))

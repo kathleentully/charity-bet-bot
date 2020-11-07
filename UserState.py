@@ -10,10 +10,11 @@ EVENT_PRICES = [
 ]
 
 class UserState:
-    def __init__(self, tickets_available=0,amount_owed=0,bets=[]):
+    def __init__(self, tickets_available=0, amount_owed=0, bets=[], paid=0):
         self.tickets_available = tickets_available
         self.amount_owed = amount_owed
         self.bets = bets
+        self.paid = paid
 
     def __str__(self):
         return f'Tickets available: {self.tickets_available}, Amount owed: ${self.amount_owed}'
@@ -29,3 +30,7 @@ class UserState:
 
         self.amount_owed += charge
         self.tickets_available += tickets
+    
+    def pay(self, amount):
+        self.paid += amount
+        self.amount_owed -= amount

@@ -40,7 +40,8 @@ async def load_game_state(bot, file_name=None):
         
         return ({await bot.fetch_user(int(user_id)): UserState(tickets_available=user_state["tickets_available"],
                                                       amount_owed=user_state["amount_owed"],
-                                                      bets=user_state["bets"]
+                                                      bets=user_state["bets"],
+                                                      paid=user_state.get("paid", 0)
                                                      ) for user_id, user_state in full_game_state["game_state"].items()},
                 open_bets,
                 set(full_game_state["used_bet_ids"]))
