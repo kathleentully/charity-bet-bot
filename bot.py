@@ -289,7 +289,7 @@ async def won(context, bet_id_or_name: int, *args):
     await log(f'Bet {bet_id} completed with winners {", ".join([x.display_name for x in context.message.mentions])}')
 
 
-@bot.command(name='standings', help=f'usage: {COMMAND_PREFIX}standings\nPrints the current standings in order.')
+@bot.command(name='await ', help=f'usage: {COMMAND_PREFIX}standings\nPrints the current standings in order.')
 @log_function_call
 async def standings(context, *args):
     FORMAT_STRING = '\n{rank:4d} {name} {tickets} ticket{ticket_s}'
@@ -394,9 +394,9 @@ async def drawprep(context, *args):
     for user in game_state.keys():
         await user.send('The drawing is about to happen! Get in your final bets and buyins!')
         await send_user_game_state(user)
-        if game_state[user].open_bets:
+        if game_state[user].bets:
             user.send('Be sure to close all open bets before the drawing. Tickets in open bet pools are lost when the winners are drawn!')
-    standings()
+    await standings()
 
 
 @bot.command(name='draw', help=f'[ADMIN ONLY] usage: {COMMAND_PREFIX}draw\nDraws one winner from the group proportional to the number of tickets available for each person. The winning ticket is removed from the pot.')
